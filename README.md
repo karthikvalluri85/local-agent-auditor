@@ -2,7 +2,7 @@
 
 **A 3-agent adversarial code/FinOps audit pipeline that runs 100% offline on a laptop CPU, using a single 398MB open model. Zero API keys. Zero cloud cost. Zero data leaving your machine.**
 
-Most "multi-agent" demos are toy research bots. This is a triad of agents that argue with each other over a real engineering problem — cost leaks, security holes, and anti-patterns in your code — and produce an executive-ready markdown report, entirely on local hardware.
+Most "multi-agent" demos are toy research bots. This is a triad of agents that argue with each other over a real engineering problem — cost leaks, security holes, and anti-patterns in your python code( (the pattern's language-agnostic — this build's just tuned to one language so far) )  — and produce an executive-ready markdown report, entirely on local hardware.
 
 ```
 Agent 1 (Auditor)  --raises findings-->  Agent 2 (Skeptic)  --cross-examines-->  Agent 3 (Synthesizer)
