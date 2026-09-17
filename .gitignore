@@ -5,3 +5,4 @@ audit_report.md
 venv/
 .DS_Store
 LINKEDIN_POST.md
+.claude/
