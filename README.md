@@ -35,26 +35,37 @@ That's precisely the failure mode this PoC is built to avoid. A demo about relia
 | Llama 3.2 | 1B–3B | ~1.3–2GB | 83.5M (highest) | ❌ Documented bug — leaks JSON into `content` |
 | **Qwen2.5** | **0.5B** | **398MB (smallest)** | **40.3M (2nd highest)** | ✅ Yes — this repo's pinned model |
 
-We still don't trust the model blindly — see [`agents.py`](agents.py)'s `safe_json_parse()`: every response is passed through a repair layer that strips markdown fences, fixes trailing commas and quote styles, and isolates the JSON object from any wrapped prose, with a corrective retry loop (3 attempts) if it's still unparseable. At 0.5B parameters the model will occasionally drift on formatting even though the underlying tool-calling mechanism is sound — the pipeline is built to not care.
+We still don't trust the model blindly — see [`src/ollama_client.py`](src/ollama_client.py)'s `safe_json_parse()`: every response is passed through a repair layer that strips markdown fences, fixes trailing commas and quote styles, and isolates the JSON object from any wrapped prose, with a corrective retry loop (3 attempts) if it's still unparseable. At 0.5B parameters the model will occasionally drift on formatting even though the underlying tool-calling mechanism is sound — the pipeline is built to not care.
 
 ## 2. Architecture
 
 ```
 local-agent-auditor/
-├── main.py              # CLI entrypoint
-├── agents.py            # All 3 agents + JSON-repair + markdown rendering
-├── requirements.txt     # Just the ollama SDK
-├── setup.sh             # One-command pull-model + install + run
+├── main.py                    # CLI entrypoint
+├── src/
+│   ├── config.py               # MODEL_NAME, OLLAMA_HOST, retry/timeout settings
+│   ├── exceptions.py           # OllamaConnectionError, InvalidModelResponseError
+│   ├── models.py                # Finding / AuditState data contracts
+│   ├── ollama_client.py         # Ollama SDK calls + safe_json_parse() repair layer
+│   ├── agents.py                 # AuditorAgent, SkepticAgent, SynthesizerAgent
+│   ├── report_builder.py         # Deterministic markdown rendering (never model-generated)
+│   └── pipeline.py               # Runs the 3 agents in sequence over shared state
+├── requirements.txt            # Just the ollama SDK
+├── setup.sh                    # One-command pull-model + install + run
 ├── sample_target/
-│   └── billing_service.py   # Deliberately flawed sample code to audit
+│   └── billing_service.py       # Deliberately flawed sample code to audit
+├── LICENSE
+├── CONTRIBUTING.md
 └── README.md
 ```
 
-- **Agent 1 — Auditor**: reads raw source, returns a structured list of findings (category, severity, evidence).
-- **Agent 2 — Skeptic**: receives *only* the findings (never the raw code again — this forces it to argue from evidence, not re-scan), returns a verdict per finding: `confirmed`, `downgraded`, or `rejected`, with a one-line challenge note.
-- **Agent 3 — Synthesizer**: receives only the surviving (non-rejected) findings and writes the executive summary fields. The markdown report itself is deterministically templated in Python — never model-generated — so formatting is always clean regardless of what the small model outputs.
+- **Agent 1 — Auditor** (`src/agents.py`): reads raw source, returns a structured list of findings (category, severity, evidence).
+- **Agent 2 — Skeptic** (`src/agents.py`): receives *only* the findings (never the raw code again — this forces it to argue from evidence, not re-scan), returns a verdict per finding: `confirmed`, `downgraded`, or `rejected`, with a one-line challenge note.
+- **Agent 3 — Synthesizer** (`src/agents.py`): receives only the surviving (non-rejected) findings and writes the executive summary fields. The markdown report itself is deterministically templated in `src/report_builder.py` — never model-generated — so formatting is always clean regardless of what the small model outputs.
 
 Each agent has **one job and one JSON contract**. This is deliberate: small models lose coherence fast when asked to do multiple things in one call ("find issues AND grade severity AND write prose"). Splitting responsibilities across 3 narrow calls is what makes a 3B model behave like a much larger one.
+
+Model I/O, agent logic, data contracts, and report rendering live in their own modules under `src/` rather than one flat file, and connection/parse failures raise domain-specific exceptions (`src/exceptions.py`) instead of generic `RuntimeError`/`ValueError` — so `main.py` can tell "Ollama's unreachable" apart from "the model won't produce valid JSON" without string-matching an error message.
 
 ## 3. Quickstart (one command)
 
@@ -98,7 +109,7 @@ Run it yourself and watch Agent 2 argue about which of these are truly "critical
 ## 5. Honest limitations (read before you demo this to your CFO)
 
 - This is a **PoC**, not a production static-analysis tool. It doesn't parse an AST — it's LLM pattern-matching against source text, so it can miss issues a real linter/SAST tool would catch, and can occasionally hallucinate a line number or function name.
-- At 0.5B parameters, this is one of the smallest models that will do this job at all — it trades reasoning depth for size and speed. The adversarial Agent 2 step meaningfully reduces false positives but doesn't eliminate them, and on more subtle or ambiguous code, findings will be shallower than a 3B+ model would produce. Treat this as a **fast first-pass triage**, not a replacement for a real security/FinOps review. If you need materially better judgment quality and can spare ~2GB instead of 400MB, swap `MODEL_NAME` in `agents.py` for `qwen2.5:3b` — same code, same contracts, no other changes needed.
+- At 0.5B parameters, this is one of the smallest models that will do this job at all — it trades reasoning depth for size and speed. The adversarial Agent 2 step meaningfully reduces false positives but doesn't eliminate them, and on more subtle or ambiguous code, findings will be shallower than a 3B+ model would produce. Treat this as a **fast first-pass triage**, not a replacement for a real security/FinOps review. If you need materially better judgment quality and can spare ~2GB instead of 400MB, swap `MODEL_NAME` in `src/config.py` for `qwen2.5:3b` — same code, same contracts, no other changes needed.
 - Currently audits one file at a time by design (keeps context small enough for reliable small-model reasoning). Multi-file/repo-wide auditing is a natural next step but needs a chunking strategy to stay within this model's effective context reliability.
 
 ## License

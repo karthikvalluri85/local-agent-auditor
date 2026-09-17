@@ -18,7 +18,9 @@ import os
 import sys
 import time
 
-from agents import run_pipeline, MODEL_NAME, OLLAMA_HOST
+from src.config import MODEL_NAME, OLLAMA_HOST
+from src.exceptions import InvalidModelResponseError, OllamaConnectionError
+from src.pipeline import run_pipeline
 
 # Report content includes emoji (severity/category markers). Some terminals
 # (notably Windows consoles using a legacy codepage like cp1252) can't encode
@@ -79,7 +81,7 @@ def main() -> int:
 
     try:
         state = run_pipeline(args.target)
-    except (RuntimeError, ValueError) as exc:
+    except (OllamaConnectionError, InvalidModelResponseError) as exc:
         print(f"\nPipeline failed: {exc}", file=sys.stderr)
         return 1
 
