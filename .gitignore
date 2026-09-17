@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+audit_report.md
+.venv/
+venv/
+.DS_Store
+LINKEDIN_POST.md
